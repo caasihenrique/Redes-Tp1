@@ -143,6 +143,10 @@ unsigned char decode16(unsigned char* input){
     return output;
 }
 
+void checksum(){
+    
+}
+
 int main(int argc, const char** argv){
     
     //char temp = *(argv[2]);
