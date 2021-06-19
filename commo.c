@@ -1,9 +1,15 @@
 #include<stdio.h>
 #include<stdlib.h>
+#include<inttypes.h>
+#include<string.h>
 
 typedef struct {
     unsigned char bits:4;
 }nibble;
+
+typedef struct{
+    unsigned short int var:8;
+}byte;
 
  unsigned char bit_Code_to_char(nibble var){
     unsigned char output;
@@ -143,8 +149,93 @@ unsigned char decode16(unsigned char* input){
     return output;
 }
 
-void checksum(){
-    
+uint16_t checksum(void *data, unsigned int bytes){
+    //uint16_t checksum16(void *data, unsigned int bytes){
+    uint16_t *data_pointer = (uint16_t *) data;
+    uint32_t total_sum;
+
+    while(bytes > 1){
+        total_sum += *data_pointer++;
+        //If it overflows to the MSBs add it straight away
+        if(total_sum >> 16){
+            total_sum = (total_sum >> 16) + (total_sum & 0x0000FFFF);
+        }
+        bytes -= 2; //Consumed 2 bytes
+    }
+    if(1 == bytes){
+        //Add the last byte
+        total_sum += *(((uint8_t *) data_pointer) + 1);
+        //If it overflows to the MSBs add it straight away
+        if(total_sum >> 16){
+            total_sum = (total_sum >> 16) + (total_sum & 0x0000FFFF);
+        }
+        bytes -= 1;
+    }
+
+    return (~((uint16_t) total_sum));
+}
+//}
+
+unsigned short NetIpChecksum(unsigned short const ipHeader[], int nWords){
+    unsigned long  sum = 0;
+    /*      * IP headers always contain an even number of bytes.      */     
+    while (nWords-- > 0){
+        sum += *(ipHeader++);
+        }
+    /*      * Use carries to compute 1's complement sum.      */     
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += sum >> 16;
+    /*      * Return the inverted 16-bit result.      */     
+    return ((unsigned short) ~sum);
+}
+
+/*
+ * Checksum routine for Internet Protocol family headers (C Version).
+ *
+ * Refer to "Computing the Internet Checksum" by R. Braden, D. Borman and
+ * C. Partridge, Computer Communication Review, Vol. 19, No. 2, April 1989,
+ * pp. 86-101, for additional details on computing this checksum.
+ */
+
+typedef unsigned short u_short;
+typedef unsigned char u_char;
+
+			/* return checksum in low-order 16 bits */
+int	in_cksum(ptr, nbytes)
+register u_short	*ptr;
+register int		nbytes;
+{
+	register long		sum;		/* assumes long == 32 bits */
+	u_short			oddbyte;
+	register u_short	answer;		/* assumes u_short == 16 bits */
+
+	/*
+	 * Our algorithm is simple, using a 32-bit accumulator (sum),
+	 * we add sequential 16-bit words to it, and at the end, fold back
+	 * all the carry bits from the top 16 bits into the lower 16 bits.
+	 */
+
+	sum = 0;
+	while (nbytes > 1)  {
+		sum += *ptr++;
+		nbytes -= 2;
+	}
+
+				/* mop up an odd byte, if necessary */
+	if (nbytes == 1) {
+		oddbyte = 0;		/* make sure top half is zero */
+		*((u_char *) &oddbyte) = *(u_char *)ptr;   /* one byte only */
+		sum += oddbyte;
+	}
+
+	/*
+	 * Add back carry outs from top 16 bits to low 16 bits.
+	 */
+
+	sum  = (sum >> 16) + (sum & 0xffff);	/* add high-16 to low-16 */
+	sum += (sum >> 16);			/* add carry */
+	answer = ~sum;		/* ones-complement, then truncate to 16 bits */
+	return(answer);
 }
 
 int main(int argc, const char** argv){
@@ -159,7 +250,30 @@ int main(int argc, const char** argv){
     unsigned char retorno;
     retorno = decode16(variavel);
     printf("O caracter da entrada: %c\n", retorno);
+    
     free(variavel);
+
+    char teste[] = {"uma frase bem grande"};
+    int tam;
+    tam = strlen(teste);
+    printf("Tamanho da frase: %d\n",tam);
+
+    uint16_t size;
+    size = checksum(teste,tam);
+    printf("Conteudo da memoria %d\n",size);
+    
+    byte B;
+    unsigned char caracter;
+    
+    B.var = (size & 0x0F);
+    caracter = B.var;
+    printf("Conversao em string de size: %d\n", caracter);
+    B.var = (size & 0xF0)>>8;
+    caracter = B.var;
+    printf("Segunda conversao: %d\n",caracter);
+
+    //unsigned short resposta;
+    //resposta = NetIpChecksum((unsigned short const) teste, tam);
 
     return 0;
 }
