@@ -8,7 +8,7 @@ typedef struct {
 }nibble;
 
 typedef struct{
-    unsigned short int var:8;
+    unsigned char var:8;
 }byte;
 
  unsigned char bit_Code_to_char(nibble var){
@@ -149,6 +149,24 @@ unsigned char decode16(unsigned char* input){
     return output;
 }
 
+typedef struct{
+    unsigned short int vetor:8;
+}short_int;
+
+
+void short_to_char(unsigned short int size, unsigned char* duo){
+    short_int var;
+
+    var.vetor = (size & 0x00FF);
+
+    //unsigned char duo[2];
+    duo[0] = (unsigned char) var.vetor;
+
+    var.vetor = (size & 0xFF00)>>8;
+    duo[1] = (unsigned char) var.vetor;
+
+}
+
 uint16_t checksum(void *data, unsigned int bytes){
     //uint16_t checksum16(void *data, unsigned int bytes){
     uint16_t *data_pointer = (uint16_t *) data;
@@ -258,22 +276,33 @@ int main(int argc, const char** argv){
     tam = strlen(teste);
     printf("Tamanho da frase: %d\n",tam);
 
-    uint16_t size;
-    size = checksum(teste,tam);
-    printf("Conteudo da memoria %d\n",size);
+    unsigned short int size;//uint16_t size;
+    size = (unsigned short int)checksum(teste,tam);
+    printf("Conteudo da memoria %x\n",size);
     
+    //unsigned char *B = malloc(sizeof(unsigned char));
     byte B;
-    unsigned char caracter;
+    unsigned char* caracter = (unsigned char *)malloc(sizeof(uint16_t));
+    printf("Tamanhos\n>unsigned char: %ld\n>uint16_t: %ld\n", sizeof(unsigned char), sizeof(uint16_t));
     
-    B.var = (size & 0x0F);
-    caracter = B.var;
-    printf("Conversao em string de size: %d\n", caracter);
-    B.var = (size & 0xF0)>>8;
-    caracter = B.var;
-    printf("Segunda conversao: %d\n",caracter);
+    B.var = (unsigned char)(size & 0x00FF);
 
-    //unsigned short resposta;
-    //resposta = NetIpChecksum((unsigned short const) teste, tam);
+    printf("O valore em B.var: %c\n",B.var);
+    //*caracter = checksum(teste,tam);
+    short_to_char((unsigned short int)checksum(teste,tam), caracter);
 
+    printf("Conversao em string de size: %s\n", caracter);
+    printf("Primeira conversao: %c\n",caracter[0]);
+    printf("Segunda conversao: %c\n",caracter[1]);
+    B.var = (unsigned char)((size & 0xFF00)>>8);
+    printf("O valor segundo em B.var: %c\n",B.var);
+    //caracter[1] = B.var;
+    
+    //unsigned short NetIpChecksum(unsigned short const ipHeader[], int nWords)
+    //unsigned short int resposta;
+    //resposta = NetIpChecksum((unsigned short const int)checksum(teste,tam), tam);
+    //short_to_char(resposta, caracter);
+    //printf("Primeira conversao: %c\n",caracter[0]);
+    //printf("Segunda conversao: %c\n",caracter[1]);
     return 0;
 }
