@@ -194,44 +194,43 @@ uint16_t checksum(void *data, unsigned int bytes){
 }
 //}
 
+/*
 unsigned short NetIpChecksum(unsigned short const ipHeader[], int nWords){
     unsigned long  sum = 0;
-    /*      * IP headers always contain an even number of bytes.      */     
+//          * IP headers always contain an even number of bytes.
     while (nWords-- > 0){
         sum += *(ipHeader++);
         }
-    /*      * Use carries to compute 1's complement sum.      */     
+//          * Use carries to compute 1's complement sum.      
     sum = (sum >> 16) + (sum & 0xFFFF);
     sum += sum >> 16;
-    /*      * Return the inverted 16-bit result.      */     
+//          * Return the inverted 16-bit result.           
     return ((unsigned short) ~sum);
 }
+*/
 
+
+// * Checksum routine for Internet Protocol family headers (C Version).
+// * Refer to "Computing the Internet Checksum" by R. Braden, D. Borman and
+// * C. Partridge, Computer Communication Review, Vol. 19, No. 2, April 1989,
+// * pp. 86-101, for additional details on computing this checksum.
 /*
- * Checksum routine for Internet Protocol family headers (C Version).
- *
- * Refer to "Computing the Internet Checksum" by R. Braden, D. Borman and
- * C. Partridge, Computer Communication Review, Vol. 19, No. 2, April 1989,
- * pp. 86-101, for additional details on computing this checksum.
- */
-
 typedef unsigned short u_short;
 typedef unsigned char u_char;
 
-			/* return checksum in low-order 16 bits */
+//			 return checksum in low-order 16 bits
 int	in_cksum(ptr, nbytes)
 register u_short	*ptr;
 register int		nbytes;
 {
-	register long		sum;		/* assumes long == 32 bits */
+	register long		sum;		// assumes long == 32 bits
 	u_short			oddbyte;
-	register u_short	answer;		/* assumes u_short == 16 bits */
+	register u_short	answer;		// assumes u_short == 16 bits 
 
-	/*
-	 * Our algorithm is simple, using a 32-bit accumulator (sum),
-	 * we add sequential 16-bit words to it, and at the end, fold back
-	 * all the carry bits from the top 16 bits into the lower 16 bits.
-	 */
+	 // Our algorithm is simple, using a 32-bit accumulator (sum),
+	 // we add sequential 16-bit words to it, and at the end, fold back
+	 // all the carry bits from the top 16 bits into the lower 16 bits.
+	 
 
 	sum = 0;
 	while (nbytes > 1)  {
@@ -239,23 +238,24 @@ register int		nbytes;
 		nbytes -= 2;
 	}
 
-				/* mop up an odd byte, if necessary */
+				// mop up an odd byte, if necessary
 	if (nbytes == 1) {
-		oddbyte = 0;		/* make sure top half is zero */
-		*((u_char *) &oddbyte) = *(u_char *)ptr;   /* one byte only */
+		oddbyte = 0;		// make sure top half is zero 
+		*((u_char *) &oddbyte) = *(u_char *)ptr;   // one byte only 
 		sum += oddbyte;
 	}
 
-	/*
-	 * Add back carry outs from top 16 bits to low 16 bits.
-	 */
+	
+	// * Add back carry outs from top 16 bits to low 16 bits.
 
-	sum  = (sum >> 16) + (sum & 0xffff);	/* add high-16 to low-16 */
-	sum += (sum >> 16);			/* add carry */
-	answer = ~sum;		/* ones-complement, then truncate to 16 bits */
+	sum  = (sum >> 16) + (sum & 0xffff);	// add high-16 to low-16
+	sum += (sum >> 16);			// add carry 
+	answer = ~sum;		// ones-complement, then truncate to 16 bits
 	return(answer);
 }
+*/
 
+/*
 int main(int argc, const char** argv){
     
     //char temp = *(argv[2]);
@@ -288,7 +288,7 @@ int main(int argc, const char** argv){
     B.var = (unsigned char)(size & 0x00FF);
 
     printf("O valore em B.var: %c\n",B.var);
-    //*caracter = checksum(teste,tam);
+    // *caracter = checksum(teste,tam);
     short_to_char((unsigned short int)checksum(teste,tam), caracter);
 
     printf("Conversao em string de size: %s\n", caracter);
@@ -306,3 +306,4 @@ int main(int argc, const char** argv){
     //printf("Segunda conversao: %c\n",caracter[1]);
     return 0;
 }
+*/
