@@ -1,254 +1,193 @@
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <arpa/inet.h>
-
-void logexit(const char *msg) {
-	perror(msg);
-	exit(EXIT_FAILURE);
-}
-
-int addrparse(const char *addrstr, const char *portstr,
-              struct sockaddr_storage *storage) {
-    if (addrstr == NULL || portstr == NULL) {
-        return -1;
-    }
-
-    uint16_t port = (uint16_t)atoi(portstr); // unsigned short
-    if (port == 0) {
-        return -1;
-    }
-    port = htons(port); // host to network short
-
-    struct in_addr inaddr4; // 32-bit IP address
-    if (inet_pton(AF_INET, addrstr, &inaddr4)) {
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)storage;
-        addr4->sin_family = AF_INET;
-        addr4->sin_port = port;
-        addr4->sin_addr = inaddr4;
-        return 0;
-    }
-
-    struct in6_addr inaddr6; // 128-bit IPv6 address
-    if (inet_pton(AF_INET6, addrstr, &inaddr6)) {
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage;
-        addr6->sin6_family = AF_INET6;
-        addr6->sin6_port = port;
-        // addr6->sin6_addr = inaddr6
-        memcpy(&(addr6->sin6_addr), &inaddr6, sizeof(inaddr6));
-        return 0;
-    }
-
-    return -1;
-}
-
-void addrtostr(const struct sockaddr *addr, char *str, size_t strsize) {
-    int version;
-    char addrstr[INET6_ADDRSTRLEN + 1] = "";
-    uint16_t port;
-
-    if (addr->sa_family == AF_INET) {
-        version = 4;
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)addr;
-        if (!inet_ntop(AF_INET, &(addr4->sin_addr), addrstr,
-                       INET6_ADDRSTRLEN + 1)) {
-            logexit("ntop");
-        }
-        port = ntohs(addr4->sin_port); // network to host short
-    } else if (addr->sa_family == AF_INET6) {
-        version = 6;
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)addr;
-        if (!inet_ntop(AF_INET6, &(addr6->sin6_addr), addrstr,
-                       INET6_ADDRSTRLEN + 1)) {
-            logexit("ntop");
-        }
-        port = ntohs(addr6->sin6_port); // network to host short
-    } else {
-        logexit("unknown protocol family.");
-    }
-    if (str) {
-        snprintf(str, strsize, "IPv%d %s %hu", version, addrstr, port);
-    }
-}
-
-int server_sockaddr_init(const char *proto, const char *portstr,
-                         struct sockaddr_storage *storage) {
-    uint16_t port = (uint16_t)atoi(portstr); // unsigned short
-    if (port == 0) {
-        return -1;
-    }
-    port = htons(port); // host to network short
-
-    memset(storage, 0, sizeof(*storage));
-    if (0 == strcmp(proto, "v4")) {
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)storage;
-        addr4->sin_family = AF_INET;
-        addr4->sin_addr.s_addr = INADDR_ANY;
-        addr4->sin_port = port;
-        return 0;
-    } else if (0 == strcmp(proto, "v6")) {
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage;
-        addr6->sin6_family = AF_INET6;
-        addr6->sin6_addr = in6addr_any;
-        addr6->sin6_port = port;
-        return 0;
-    } else {
-        return -1;
-    }
-}
-
-
-//main
-
-#include "common.h"
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <sys/types.h>
+#include <stdint.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
-
-void usage(int argc, char **argv) {
-    printf("usage: %s <server IP> <server port>\n", argv[0]);
-    printf("example: %s 127.0.0.1 51511\n", argv[0]);
-    exit(EXIT_FAILURE);
-}
+#include <sys/time.h>
+#include <errno.h>
 
 #define BUFSZ 1024
+#define SYNC 0xdcc023c2
 
-int main(int argc, char **argv) {
-    
-    if (argc < 3) {
-     usage(argc, argv);
+typedef enum {false, true} bool;
+
+typedef struct frame_t//Estrutura do "quadro"
+{
+	uint32_t sync1;
+	uint32_t sync2;
+	uint16_t chksum;
+	uint16_t length;
+	uint8_t id;
+	uint8_t flags;
+	uint8_t data[BUFSZ];
+} frame;
+
+int argtest (int argc, char* argv[])//Função para teste de argumentos
+{
+	if(argc < 2)
+	{
+		fprintf(stderr, "Erro passagem de argumentos.\n");
+		exit(1);
+	}
+	else if(argc < 5)
+	{
+		if(strcmp(argv[1], "-s") == 0)
+		{
+			fprintf(stderr, "Erro! Use ./dcc023c2 -s <port> <INPUT.txt> <OUTPUT.txt>\n");
+			exit(1);
+		}
+		else if(strcmp(argv[1], "-c") == 0)
+		{
+			fprintf(stderr, "Erro! Use ./dcc023c2 -c <IPPAS> <port> <INPUT.txt> <OUTPUT.txt>\n");
+			exit(1);
+		}
+	}
+	return 1;
+}
+
+unsigned short checksum(unsigned short *ptr, int bytes) 
+{
+    register long sum;
+    unsigned short oddbyte;
+    register short answer;
+
+    sum = 0;
+    while(bytes > 1)
+    {
+        sum += *ptr++;
+        bytes -= 2;
+    }
+    if(bytes == 1)
+    {
+        oddbyte = 0;
+        *((u_char*)&oddbyte) = *(u_char*)ptr;
+        sum += oddbyte;
     }
 
-    char identificador1[2] = "-c";
-    char identificador2[2] = "-s";
-    
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum = sum + (sum >> 16);
+    answer = (short)~sum;
 
-    if(strncmp(identificador1,argv[1],2)==0) {//Cliente 
+    return(answer);
+}
 
-        struct sockaddr_storage storage;
-        if (0 != addrparse(argv[2], argv[3], &storage)) {
-            usage(argc, argv);
-        }
+int main(int argc, char* argv[])
+{
+	if(argtest(argc, argv) != 1)//Verifica argumentos 
+		return 0;
 
-        int s;
-        s = socket(storage.ss_family, SOCK_STREAM, 0);
-        if (s == -1) {
-            logexit("socket");
-        }
-        struct sockaddr *addr = (struct sockaddr *)(&storage);
-        if (0 != connect(s, addr, sizeof(storage))) {
-            logexit("connect");
-        }
+	//Declaração das variáveis
+	int s, s_use, s_new;//sockets
+	int port;
+	int tam;
+	
+	struct sockaddr_in l_addr, r_addr;//endereços de envio e recebimento
+	char *input;
+	char *output;
+	uint8_t buffer[BUFSZ];
+	frame frame_send, frame_recv, ack;//quadros enviados, recebidos e ack
+	int l_id, r_id;
+	l_id = 1;
+	r_id = 1;
+	uint16_t l_chksum = 0;
 
-        char addrstr[BUFSZ];
-        addrtostr(addr, addrstr, BUFSZ);
+	s = socket(AF_INET, SOCK_STREAM, 0);
 
-        printf("connected to %s\n", addrstr);
+	if(strcmp(argv[1], "-s") == 0) //Inicia Servidor/Receptor
+	{
+		input = argv[3];
+		output = argv[4];
+		port = atoi(argv[2]);
+		memset((char*)&l_addr, '\0', sizeof(l_addr));
+		l_addr.sin_family = AF_INET;
+		l_addr.sin_port = htons(port);
+		l_addr.sin_addr.s_addr = INADDR_ANY;
 
-        char buf[BUFSZ];
-        memset(buf, 0, BUFSZ);
-        
-        FILE *arq;
-        arq = fopen(argv[4], "rt");
-        if (arq == NULL) {
-            printf("Arquivo Nulo >\n");
-            return 0;
-        }   
-    
-        while(!feof(arq)) {
-            fgets(buf, BUFSZ-1, arq);
-        }
-        printf("Menssege >>%s\n", buf );
+		if(bind(s, (struct sockaddr *) &l_addr, sizeof(struct sockaddr)) < 0)
+		{
+			printf("Erro Bind\n");
+			exit(1);
+		}
+		printf("Aguardando conexão\n");
+		if(listen(s, 10) < 0)
+		{
+			printf("Erro Listen\n");
+			exit(1);
+		}
+		socklen_t sock_size = sizeof(struct sockaddr_in);
+		s_new = accept(s, (struct sockaddr *) &r_addr, &sock_size);
+		if(s_new < 0)
+		{
+			printf("Erro accept\n");
+			exit(1);
+		}
+		printf("Conectado\n");
+		
+		s_use = s_new;
+	}
+	if(strcmp(argv[1], "-c") == 0)//Inicia Cliente/Transmissor
+	{
+		
+		input = argv[4];
+		output = argv[5];
+		char *ip, *port_num;
+		ip = argv[2];
+		port = atoi(argv[3]);
+		memset((char*)&l_addr,'\0', sizeof(struct sockaddr));
+		l_addr.sin_family =AF_INET;
+		l_addr.sin_port = htons(port);
+		inet_pton(AF_INET, ip, &l_addr.sin_addr);
 
-        //fgets(buf, BUFSZ-1, stdin);
-        size_t count = send(s, buf, strlen(buf)+1, 0);
-        if (count != strlen(buf)+1) {
-            logexit("send");
-        }
+		if(connect(s, (struct sockaddr *) &l_addr,sizeof(struct sockaddr)) <0)
+		{
+			printf("Erro ao conectar");
+			exit(1);
+		}
+		s_use = s;
+	}
+	
+	FILE *f_send = fopen(input, "rt");//Abertura dos .txt's
+	if(f_send == NULL)
+	{
+		printf("Erro ao abrir arquivo input.txt.\n");
+		fclose(f_send);
+		exit(1);
+	}
 
-        memset(buf, 0, BUFSZ);
-        unsigned total = 0;
-        while(1) {
-            count = recv(s, buf + total, BUFSZ - total, 0);
-            if (count == 0) {
-                // Connection terminated.
-                break;
-            }
-            total += count;
-        }
-        close(s);
+	FILE *f_recv = fopen(output, "w");
+	if(f_recv == NULL)
+	{
+		printf("Erro ao abrir arquivo output.txt\n");
+		fclose(f_recv);
+		exit(1);
+	}
+	while((tam = fread(buffer, sizeof(uint8_t), BUFSZ, f_send)) > 0 )//Inicializa os quadros
+	{
+		if(tam >= 0)
+		{
+			memset(&frame_send, '\0', sizeof(frame));
+			frame_send.sync1 = htonl(SYNC);
+			frame_send.sync2 = htonl(SYNC);
+			frame_send.chksum = htons(0);
+			frame_send.length = htonl(tam);
+			l_id == 1 ? (frame_send.id = 0) : (frame_send.id = 1);
+			tam == BUFSZ ? (frame_send.flags = 0) : (frame_send.flags = 64);
+			memcpy(frame_send.data, &buffer, tam);
+			frame_send.chksum = htons((uint16_t)checksum((unsigned short *) &frame_send, sizeof(frame)));
+			if(send(s_use, (frame *) &frame_send, sizeof(frame), 0) < 0)
+			{
+				printf("Erro envio\n");
+				exit(1);
+			}
+			puts(frame_send.data);
+		}
+		
+	}
+	fclose(f_send);
+	fclose(f_recv);
+		
 
-        printf("received %u bytes\n", total);
-        puts(buf);
-
-        exit(EXIT_SUCCESS);
-    }
-    if(strncmp(identificador2,argv[1],2)==0){//servidor
-        struct sockaddr_storage storage;
-        if (0 != server_sockaddr_init(argv[2], argv[3], &storage)) {
-            usage(argc, argv);
-        }
-
-        int s;
-        s = socket(storage.ss_family, SOCK_STREAM, 0);
-        if (s == -1) {
-            logexit("socket");
-        }
-
-        int enable = 1;
-        if (0 != setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int))) {
-            logexit("setsockopt");
-        }
-
-        struct sockaddr *addr = (struct sockaddr *)(&storage);
-        if (0 != bind(s, addr, sizeof(storage))) {
-            logexit("bind");
-        }
-
-        if (0 != listen(s, 10)) {
-            logexit("listen");
-        }
-
-        char addrstr[BUFSZ];
-        addrtostr(addr, addrstr, BUFSZ);
-        printf("bound to %s, waiting connections\n", addrstr);
-
-        while (1) {
-            struct sockaddr_storage cstorage;
-            struct sockaddr *caddr = (struct sockaddr *)(&cstorage);
-            socklen_t caddrlen = sizeof(cstorage);
-
-            int csock = accept(s, caddr, &caddrlen);
-            if (csock == -1) {
-                logexit("accept");
-            }
-
-            char caddrstr[BUFSZ];
-            addrtostr(caddr, caddrstr, BUFSZ);
-            printf("[log] connection from %s\n", caddrstr);
-
-            char buf[BUFSZ];
-            memset(buf, 0, BUFSZ);
-            size_t count = recv(csock, buf, BUFSZ - 1, 0);
-            printf("[msg] %s, %d bytes: %s\n", caddrstr, (int)count, buf);
-
-            sprintf(buf, "remote endpoint: %.1000s\n", caddrstr);
-            count = send(csock, buf, strlen(buf) + 1, 0);
-            if (count != strlen(buf) + 1) {
-                logexit("send");
-            }
-            close(csock);
-        }
-
-        exit(EXIT_SUCCESS);
-                
-            } 
+	return 0;
 }
