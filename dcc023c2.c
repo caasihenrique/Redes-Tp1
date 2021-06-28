@@ -11,6 +11,170 @@
 #define BUFSZ 1024
 #define SYNC 0xdcc023c2
 
+typedef struct {
+    unsigned char bits:4;
+}nibble;
+
+typedef struct{
+    unsigned char var:8;
+}byte;
+
+ unsigned char bit_Code_to_char(nibble var){
+    unsigned char output;
+    switch (var.bits)
+    {
+    case 0:
+        output = '0';
+        break;
+    case 1:
+        output = '1';
+        break;
+    case 2:
+        output = '2';
+        break;
+    case 3:
+        output = '3';
+        break;
+    case 4:
+        output = '4';
+        break;
+    case 5:
+        output = '5';
+        break;
+    case 6:
+        output = '6';
+        break;
+    case 7:
+        output = '7';
+        break;
+    case 8:
+        output = '8';
+        break;
+    case 9:
+        output = '9';
+        break;
+    case 10:
+        output = 'A';
+        break;
+    case 11:
+        output = 'B';
+        break;
+    case 12:
+        output = 'C';
+        break;
+    case 13:
+        output = 'D';
+        break;
+    case 14:
+        output = 'E';
+        break;
+    case 15:
+        output = 'F';
+        break;                                                                                                
+    default:
+        break;
+    }
+    return output;
+}
+
+ nibble char_Code_to_bit(unsigned char var){
+    nibble output;
+    switch (var)
+    {
+    case '0':
+        output.bits = 0;
+        break;
+    case '1':
+        output.bits = 1;
+        break;
+    case '2':
+        output.bits = 2;
+        break;
+    case '3':
+        output.bits = 3;
+        break;
+    case '4':
+        output.bits = 4;
+        break;
+    case '5':
+        output.bits = 5;
+        break;
+    case '6':
+        output.bits = 6;
+        break;
+    case '7':
+        output.bits = 7;
+        break;
+    case '8':
+        output.bits = 8;
+        break;
+    case '9':
+        output.bits = 9;
+        break;
+    case 'A':
+        output.bits = 10;
+        break;
+    case 'B':
+        output.bits = 11;
+        break;
+    case 'C':
+        output.bits = 12;
+        break;
+    case 'D':
+        output.bits = 13;
+        break;
+    case 'E':
+        output.bits = 14;
+        break;
+    case 'F':
+        output.bits = 15;
+        break;                                                                                                
+    default:
+        break;
+    }
+    return output;
+}
+
+void encode16(unsigned char input, unsigned char* output){
+    nibble dir, esq;
+    dir.bits = (input & 0x0F);
+    esq.bits = (input & 0xF0)>>4;
+    //printf("valor a esquerda do byte: %d\n",esq.bits);
+    //printf("valor a direita do byte: %d\n",dir.bits);
+     
+    output[0] = bit_Code_to_char(esq);
+    output[1] = bit_Code_to_char(dir);
+    
+}
+
+unsigned char decode16(unsigned char* input){
+    unsigned char output;
+    nibble aux1, aux2;
+    aux1 = char_Code_to_bit(input[0]);
+    aux2 = char_Code_to_bit(input[1]);;
+    output = (aux1.bits << 4) | aux2.bits;
+    
+    return output;
+}
+
+typedef struct{
+    unsigned short int vetor:8;
+}short_int;
+
+
+void short_to_char(unsigned short int size, unsigned char* duo){
+    short_int var;
+
+    var.vetor = (size & 0x00FF);
+
+    //unsigned char duo[2];
+    duo[0] = (unsigned char) var.vetor;
+
+    var.vetor = (size & 0xFF00)>>8;
+    duo[1] = (unsigned char) var.vetor;
+
+}
+
 typedef enum {false, true} bool;
 
 typedef struct frame_t//Estrutura do "quadro"
@@ -21,7 +185,7 @@ typedef struct frame_t//Estrutura do "quadro"
 	uint16_t length;
 	uint8_t id;
 	uint8_t flags;
-	uint8_t data[BUFSZ];
+	char data[BUFSZ];
 } frame;
 
 int argtest (int argc, char* argv[])//Função para teste de argumentos
@@ -87,11 +251,11 @@ int main(int argc, char* argv[])
 	char *input;
 	char *output;
 	uint8_t buffer[BUFSZ];
-	frame frame_send, frame_recv, ack;//quadros enviados, recebidos e ack
-	int l_id, r_id;
+	frame frame_send;//, frame_recv, ack;//quadros enviados, recebidos e ack
+	int l_id;//,r_id;
 	l_id = 1;
-	r_id = 1;
-	uint16_t l_chksum = 0;
+	//r_id = 1;
+	//uint16_t l_chksum = 0;
 
 	s = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -132,7 +296,7 @@ int main(int argc, char* argv[])
 		
 		input = argv[4];
 		output = argv[5];
-		char *ip, *port_num;
+		char *ip; //*port_num;
 		ip = argv[2];
 		port = atoi(argv[3]);
 		memset((char*)&l_addr,'\0', sizeof(struct sockaddr));
@@ -176,14 +340,23 @@ int main(int argc, char* argv[])
 			tam == BUFSZ ? (frame_send.flags = 0) : (frame_send.flags = 64);
 			memcpy(frame_send.data, &buffer, tam);
 			frame_send.chksum = htons((uint16_t)checksum((unsigned short *) &frame_send, sizeof(frame)));
-			if(send(s_use, (frame *) &frame_send, sizeof(frame), 0) < 0)
+
+            int size = sizeof(frame_send);
+            unsigned char *texto_send = malloc(2*size);
+            
+            int i;
+            for(i = 0; i < size; i++ ){
+                encode16((unsigned char)frame_send.data[i], &texto_send[i]);
+            }         
+
+			if(send(s_use, (frame *) &texto_send, size, 0) < 0)
 			{
 				printf("Erro envio\n");
 				exit(1);
 			}
 			puts(frame_send.data);
+            free(texto_send);
 		}
-		
 	}
 	fclose(f_send);
 	fclose(f_recv);
