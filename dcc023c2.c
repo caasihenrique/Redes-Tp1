@@ -5,7 +5,7 @@
 
 #include <arpa/inet.h>
 
-#include "common.h"
+#include "commo.h"
 #include <unistd.h>
 
 #include <sys/types.h>
@@ -116,16 +116,99 @@ void usage(int argc, char **argv) {
 }
 
 #define BUFSZ 1024
+#define MAX 65536
+
+typedef struct{
+   int unsigned SYNC_1;
+   int unsigned SYNC_2;
+   unsigned short int length;
+   unsigned short int checksum;
+   unsigned char ID;
+   unsigned char flags;
+   char *dados;
+}quadro;
+
+uint16_t checksum(void *data, unsigned int bytes){
+
+    uint16_t *data_pointer = (uint16_t *) data;
+    uint32_t total_sum;
+
+    while(bytes > 1){
+        total_sum += *data_pointer++;
+        //If it overflows to the MSBs add it straight away
+        if(total_sum >> 16){
+            total_sum = (total_sum >> 16) + (total_sum & 0x0000FFFF);
+        }
+        bytes -= 2; //Consumed 2 bytes
+    }
+    if(1 == bytes){
+        //Add the last byte
+        total_sum += *(((uint8_t *) data_pointer) + 1);
+        //If it overflows to the MSBs add it straight away
+        if(total_sum >> 16){
+            total_sum = (total_sum >> 16) + (total_sum & 0x0000FFFF);
+        }
+        bytes -= 1;
+    }
+
+    return (~((uint16_t) total_sum));
+}
+
+typedef unsigned short u_short;
+typedef unsigned char u_char;
+
+//			 return checksum in low-order 16 bits
+int	in_cksum(ptr, nbytes)
+register u_short	*ptr;
+register int		nbytes;
+{
+	register long		sum;		// assumes long == 32 bits
+	u_short			oddbyte;
+	register u_short	answer;		// assumes u_short == 16 bits 
+
+	 // Our algorithm is simple, using a 32-bit accumulator (sum),
+	 // we add sequential 16-bit words to it, and at the end, fold back
+	 // all the carry bits from the top 16 bits into the lower 16 bits.
+	 
+
+	sum = 0;
+	while (nbytes > 1)  {
+		sum += *ptr++;
+		nbytes -= 2;
+	}
+
+				// mop up an odd byte, if necessary
+	if (nbytes == 1) {
+		oddbyte = 0;		// make sure top half is zero 
+		*((u_char *) &oddbyte) = *(u_char *)ptr;   // one byte only 
+		sum += oddbyte;
+	}
+
+	
+	// * Add back carry outs from top 16 bits to low 16 bits.
+
+	sum  = (sum >> 16) + (sum & 0xffff);	// add high-16 to low-16
+	sum += (sum >> 16);			// add carry 
+	answer = ~sum;		// ones-complement, then truncate to 16 bits
+	return(answer);
+}
 
 int main(int argc, char **argv) {
-    
+    /*
     if (argc < 3) {
      usage(argc, argv);
     }
+    */
 
     char identificador1[2] = "-c";
     char identificador2[2] = "-s";
-    
+
+    quadro DCCNET;
+    DCCNET.SYNC_1 = 0xdcc023c2;
+    DCCNET.SYNC_2 = 0xdcc023c2;
+    DCCNET.checksum = 0;
+    DCCNET.ID = 0;
+    DCCNET.flags = 0x00;//pode assumir 0x80,0x40
 
     if(strncmp(identificador1,argv[1],2)==0) {//Cliente 
 
@@ -162,9 +245,35 @@ int main(int argc, char **argv) {
         while(!feof(arq)) {
             fgets(buf, BUFSZ-1, arq);
         }
-        printf("Menssege >>%s\n", buf );
 
-        //fgets(buf, BUFSZ-1, stdin);
+        DCCNET.length = (unsigned short int)strlen(buf);
+        printf("tamanho da mensagem: %d\n", DCCNET.length);
+        DCCNET.dados = malloc(DCCNET.length*sizeof(char));
+
+        memcpy(DCCNET.dados,buf,(int)DCCNET.length);
+        DCCNET.length = htons(DCCNET.length);
+        
+        printf("Menssege >>%s\n", DCCNET.dados );
+        printf("Valor do length %d\n",DCCNET.length);
+        printf("Tamanho do DCCNET %ld\n",sizeof(DCCNET));
+        printf("Tamanho do SYNC_1 %ld\n",sizeof(DCCNET.SYNC_1));
+        printf("Tamanho do SYNC_2 %ld\n",sizeof(DCCNET.SYNC_2));
+        printf("Tamanho do length %ld\n",sizeof(DCCNET.length));
+        printf("Tamanho do checksum %ld\n",sizeof(DCCNET.checksum));
+        printf("Tamanho do ID %ld\n",sizeof(DCCNET.ID));
+        printf("Tamanho do flags %ld\n",sizeof(DCCNET.flags));
+        printf("Tamanho do dados %ld\n",sizeof(DCCNET.dados));
+
+        DCCNET.checksum = (unsigned short int)checksum(&DCCNET,sizeof(DCCNET));
+        printf("Primeira vez Ckesum = %d\n", DCCNET.checksum );
+
+        DCCNET.checksum = (unsigned short int)checksum(&DCCNET,sizeof(DCCNET));
+        printf("Segunda vez Ckesum = %d\n", DCCNET.checksum );
+        //trocar o sinal e imprimir
+
+        short int retorno = in_cksum(DCCNET, sizeof(DCCNET));
+        printf("Primeira vez in_cksum = %d\n", retorno );
+
         size_t count = send(s, buf, strlen(buf)+1, 0);
         if (count != strlen(buf)+1) {
             logexit("send");
