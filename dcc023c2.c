@@ -8,8 +8,12 @@
 #include <sys/time.h>
 #include <errno.h>
 
+#include <unistd.h>
+//#include <sys/types.h>
+
 #define BUFSZ 1024
 #define SYNC 0xdcc023c2
+#define MAX_FRAME 65550
 
 typedef struct {
     unsigned char bits:4;
@@ -280,16 +284,32 @@ int main(int argc, char* argv[])
 			printf("Erro Listen\n");
 			exit(1);
 		}
-		socklen_t sock_size = sizeof(struct sockaddr_in);
-		s_new = accept(s, (struct sockaddr *) &r_addr, &sock_size);
-		if(s_new < 0)
-		{
-			printf("Erro accept\n");
-			exit(1);
-		}
-		printf("Conectado\n");
-		
-		s_use = s_new;
+
+        socklen_t sock_size = sizeof(struct sockaddr_in);
+        s_new = accept(s, (struct sockaddr *) &r_addr, &sock_size);
+        if(s_new < 0)
+        {
+            printf("Erro accept\n");
+            exit(1);
+        }
+        printf("Conectado\n");
+
+        char buf[MAX_FRAME];
+        memset(buf, 0, MAX_FRAME);
+        unsigned total = 0;
+        size_t count;
+        while(1) {
+            count = recv(s_new, buf + total, MAX_FRAME - total, 0);
+            if (count == 0) {
+                // Connection terminated.
+                break;
+            }
+            total += count;
+        }
+        puts(buf);
+        s_use = s_new;
+        close(s_new);
+
 	}
 	if(strcmp(argv[1], "-c") == 0)//Inicia Cliente/Transmissor
 	{
@@ -315,7 +335,7 @@ int main(int argc, char* argv[])
 	FILE *f_send = fopen(input, "rt");//Abertura dos .txt's
 	if(f_send == NULL)
 	{
-		printf("Erro ao abrir arquivo input.txt.\n");
+		printf("Erro ao abrir arquivo %s.\n", argv[3]);
 		fclose(f_send);
 		exit(1);
 	}
@@ -323,7 +343,7 @@ int main(int argc, char* argv[])
 	FILE *f_recv = fopen(output, "w");
 	if(f_recv == NULL)
 	{
-		printf("Erro ao abrir arquivo output.txt\n");
+		printf("Erro ao abrir arquivo %s\n", argv[4]);
 		fclose(f_recv);
 		exit(1);
 	}
